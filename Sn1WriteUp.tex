@@ -1,0 +1,219 @@
+\documentclass[12pt]{article}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{wrapfig}
+\usepackage{indentfirst}
+\usepackage{amssymb}
+\usepackage{chemmacros}
+\usepackage{hyperref}
+\usepackage{textcomp}
+
+\usepackage[a4paper, portrait, margin=0.8in]{geometry}
+
+
+\title{CBE Final Assignment: Monte Carlo for Butyl-Chloride}
+
+\author{Maya Rubenstein}
+
+\date{October 2024}
+\def\sn#1{\times 10^{#1}}
+\def\units#1{\; \text{#1}}
+\captionsetup{width=.9\linewidth}
+
+\begin{document}
+\maketitle
+
+\setlength\heavyrulewidth{0.25ex}
+\setlength\lightrulewidth{0.15ex}
+\captionsetup{aboveskip=3pt, belowskip = 6 pt}
+
+\noindent I pledge my honor that I have completed this assignment in accordance with University policy.
+
+\newcommand{\tbutyl}{\textit{t}-Butyl$^{+}$}
+\renewcommand{\sn}{S$_{\text{N}}$1}
+
+\section{Abstract}
+This study investigated ion pairs in the paradigmatic \sn subtrate tbutyl-chloride. It implemented Monte Carlo simulation for the NVT ensemble and included both rotations and translations of molecules. It explored how temperature affects equilibrium ionic separation, and found a slight tendency for hotter systems to have larger distances as well as greater fluctuations in distance. These findings shed light on \sn \: kinetics.
+
+\section{Introduction: Motivating Question}
+This study aims to investigate the separated ions in an \sn \:  reaction. \sn reactions begin with a substrate and leaving group in a polar solvent. The first step of the reaction involves the leaving group separating from the substrate molecule, leaving a cation and an anion. Jorgensen et el., in the paper "Hydration and Energetics for (CH$_{3}$)$_{3}$CCl Ion Pairs in Aqueous Soltuion," explored the transition from closely positioned ions, or contact pairs, to free ions in solution. They used \tbutyl Chloride in water as their model system. In their study, they imagine that the first step of the reaction has occured and the Chloride has separated from the hydrocarbon framework, leaving a halogen ion and a tertiary carbocation. They held the ion pair at various distances, and equilibrated the solvent interaction to find the free energy using Monte Carlo. Our study aims to emulate Jorgenson et al, but asks slightly different questions. Instead, we ask how the equilibrium distance between the ion pairs changes with temperature. We thus allow the ion pair to move and rotate along with the solvent molecules, and aim to determine the ideal separation distance at various temperatures.
+    
+The relationship between the separated leaving group and cation sheds light on the kinetics of \sn \: reactions. The liklihood for the back reaction to occur, ie for the chloride ion to reattach to the \tbutyl cation, depends on the tendency of the two ions remain close to each other. Analogously, the tendency of hydroxyl groups to serve as nucleophiles and bond to the \tbutyl cation depends on their proximities. This study aims to examine the energetics of this paradigmatic \sn system to shed light of dynamics and kinetics.
+
+\section{Programming Implementation}
+For our implementation, we chose to use a more object-oriented approach than has been typically followed in class \footnote{I think being a COS minor has given me a intense predilection to make everything as object-oriented as possible; COS126 and COS226 really push it.} We created a \texttt{molecule} class to represent each molecule. The class had attributes for \texttt{type}, denoting the chemical species, and a list of interaction sites. The interaction sites were of type \texttt{interactionSite}, another custom class, which kept track of position, charge, sigma, and epsilon (ie, the Lennard Jones parameters, see below).
+
+In order to represent molecular positions and geometries, we save the position of each central atom as distance from the coordinate system of the box. This would be the central carbon in \tbutyl, oxygen in water, and chlorine in chlorine. Then, for the remaining atoms, we save their position vectors from the central atom. This allows for calculating rotations (see section Perturbations below) as well as ease of applying translations.
+
+\section{System Parameters \& Conditions}
+The density of water at room temperate is 1 g/mL. While this fluctuates slightly at different temperatures, we can take this as a reliable estimate for temperatures close to room temperature. 1 g/mL water translates to a density of approximately 0.0334 atoms/\AA$^{3}$. Thus, we ran the system at this target density. Temperatures assessed were 280, 300, 320, 340, and 360 K, so water would be realistically liquid. The cell size was chosen as a cube of 15 \AA, so that there would be 125 molecules in the cell. 123 of the particles were water molecules, the remaining two were the ions. The ions began at a separation of 3.0 \AA, to be close to Jorgenson et al's determined equilibrium distance of 2.9 \AA and comparable with the length of the \tbutyl species. We chose to run this with the NVT ensemble for simplicity (although NPT was used in the emulated study). We used Metropolis criterion and periodic boundary conditions as usual, and chose rotational and translation displacement to aim for an approximately 0.4 acceptance probability.
+
+\section{Particles \& Potentials}
+The butyl and Cl components of (CH$_{3}$)$_{3}$CCl were considered to be completely ionic by this model; charge coefficients were not a function of distance. Jorgenson et al.\ justified this by referencing experimental results that indicate a charge separation of close to 80\% at the transition state for this S$_{\text{N}}1$ reaction. The study, however, did not consider each atom separately. The methyl groups of \textit{t}-butyl were considered as a single unit, with a single interaction site. The bond angles and bond lengths were fixed within the \tbutyl cation. The positive charge on the \textit{t}-butyl group was distributed 40\% on the central C atom and 20\% on each methyl group. Water, the solvent, was considered in accordance with the TIP4P model, which is also rigid with fixed bond angles and bond lengths.\footnote{\url{https://docs.lammps.org/Howto_tip4p.html}} Essentially, we have a set of three species.
+
+
+\begin{gather*}
+    S = \{\textit{t-}\text{Bu}^{+}, \text{Cl}^{-}, \text{H$_{2}$O}\}
+\end{gather*}
+and each species $s \in S$ has a set of interaction sites $I^{s}$.
+
+The paper used a potential function with terms of both Lennard-Jones and Coulombic interactions. For the interaction between two species $r$ and $s \in S$, we sum over the interaction cites $I^{r}$ and $I^{s}$:
+\begin{gather*}
+    U_{rs} = \sum_{i}^{I^{r}}\sum_{j}^{I^{s}} U_{\text{Coulomb}} + U_{\text{LJ}}
+\end{gather*}
+The Coulombic potential is given by 
+\begin{gather*}
+    U_{\text{Coulomb}, ij} = k \frac{q_{i}q_{j}}{r_{ij}}
+\end{gather*}
+where the $i$ and $j$ indicate reaction sites. The $q_{i}$ and $q_{j}$ terms are the fixed charge distributions determined by the authors and $r_{ij}$ is the distance between the interaction sites. As for the Lennard-Jones component, the study modifies the typical Lennard-Jones potential
+\begin{gather*}
+    U_{\text{LJ}}(r) = 4\varepsilon \left[ \left(\frac{\sigma}{r}\right)^{12} - \left(\frac{\sigma}{r}\right)^{6}\right]
+\end{gather*}
+because each interaction site has a different value for $\varepsilon$ and $\sigma$. They include both sites' contributions by multiplying and taking the square root:
+\begin{gather*}
+    \varepsilon_{ij} = \sqrt{\varepsilon_{i}\varepsilon_{j}}\\
+    \sigma_{ij} = \sqrt{\sigma_{i}\sigma_{j}}
+\end{gather*}
+As a result, the Lennard-Jones potential becomes
+\begin{gather*}
+    U_{\text{LJ}, ij} = 4\sqrt{\varepsilon_{i}\varepsilon_{j}}\left[ \left(\frac{\sigma_{i}^{6}\sigma_{j}^{6}}{r^{12}}\right) - \left(\frac{\sigma_{i}^{3}\sigma_{j}^{3}}{r^{6}}\right)\right]
+\end{gather*}
+The potential coefficients are given in Table 1.
+
+\begin{table}[h]
+    \begin{center}
+        \begin{tabular}{lccc}
+            \toprule
+            \textbf{site} & \textbf{q (units of $|$e$^{-}|$)} & \textbf{$\sigma (\text{\AA}$)} & $\varepsilon$ (kcal/mol)\\
+            \midrule
+            O & 0.0.0 & 0.3.15358 & 0.15504\\
+H & 0.52 & 0.0 & 0.0 \\
+M$^{b}$ & -1.04 & 0.0 & 0.0 \\
+Cl & -1.00 & 4.417 & 0.118 \\
+C & 0.40 & 2.250 & 0.050 \\
+CH$_{3}$ & 0.20 & 3.000 & 0.100 \\
+
+            \bottomrule 
+            \end{tabular}
+            \caption{Paramters for potential functions}
+    \end{center}
+\end{table}
+
+However, in order to use the paper's parameters, we must use the same units. The paper formulated the Coulomb's energy as 
+\begin{gather*}
+    \frac{q_{i}q_{j}e^{2}}{r_{ij}}
+\end{gather*}
+W were unsure as to the meaning of $e$ here; perhaps it signifies one unit of atomic charge, but this would not serve as the the Coulombic force constant to convert to kcal/mol. The remaining parameters in the equation are in units of kcal/mol and Angstrom. To find the coefficient on the Coulombic potential term, we need to convert the coefficient from $8.99 \times 10^{-9}$ Nm$^{2}$/C$^{2}$ to units of $\frac{\text{kcal} \cdot  \mathring{A}}{\text{mol} \cdot [\text{e}]^{2}}$.
+\begin{gather*}
+    9 \times 10^{9} \; \frac{\text{J}\cdot \text{m}}{\text{C}^{2}} \times \frac{10^{10} \text{\AA}}{\text{m}} \times \left(\frac{1.6 \times 10^{-19} \text{C}}{\text{e}^{-}}\right)^{2} \times \frac{2.39 \times 10^{-4} \text{kcal}}{\text{J}} = 5.51 \times 10 ^{-22} \frac{\text{kcal} \cdot \text{\AA}}{[\text{e}^{-}]^{2}}
+\end{gather*}
+Dividing by 6.022 $\times 10^{23}$ gives $9.144 \times 10^{-46} \frac{\text{kcal} \cdot \text{\AA}}{\text{mol} \cdot [\text{e}^{-}]^{2}}$.
+
+\textbf{Scaling \& Truncation Scheme:} Because simple spherical truncation led to instability, Jorgenson et al developed the following scaling and truncation scheme for the potential energies for interaction sites' relationships with oxygen:
+\begin{gather*}
+     S(r^{2}) = \begin{cases} 
+      1 & r^{2} \leq r_{L}^{2} \\
+      \frac{r_{U}^{2} - r^{2}}{r_{U}^{2} - r_{L}^{2}} & r_{L}^{2} < r^{2} < r_{U}^{2} \\
+      0 & r^{2} \geq r_{U}^{2} 
+   \end{cases}
+\end{gather*}
+The authors chose $r_{L} = 7.5\,\text{\AA}$ and $r_{U} = 8.0\,\text{\AA}$. For the O$\cdots$C interactions, each was scaled independently. However, for water-water interactions, the authors used a simple cutoff: all interaction sites were included if the minimum distance was less than or equal to $r_{U}$. We simplified this to applying a spherical cutoff independently to all sites in water at $r_{U}$.
+
+\section{Perturbations}
+The Jorgenson study considered a single ion pair with 250 solvent molecules, and equilibrated the system as various fixed \textit{t}-Butyl$^{+} \cdots$ Cl$^{-}$ distances. Because of this, the vector connecting the central carbon and chlorine was kept constant, and kept in parallel with the long axis of the periodic cell. Thus, perturbations included rotating and translating water molecules and rotating tthe \textit{t}-Butyl$^{+}$ cation along the $C_{3}$ axis. However, because our simulation aimed to look at the distribution of \textit{t}-Butyl$^{+} \cdots$ Cl$^{-}$ more generally, we allowed more freedom in perturbations. Instead, we rotated the \textit{t}-Butyl cation along its other axes and translate the ion pair as well.
+
+\subsection{Translation}
+To apply translations, we need only to move the central atom, as the positions of the other interaction sites are defined in relation to the central atom.
+
+\subsection{Rotations}
+Because they are planar, both the water molecules and \tbutyl have two degrees of rotational freedom. Since they are kept rigid, there are no vibrtional degrees of freedom (stretching or bending). Thus, the full set of possible permutations are translations and rotations. Chlorine, as a singular atom, can only be translated.
+
+\begin{figure}[h]
+    \begin{center}
+    \includegraphics*[width = 0.55\textwidth]{rotation.png}
+    \caption{Water and \tbutyl both have two rotational degrees of freedom: one C$_{3}$ axis and one around a C$_{2}$ axis.}
+    \end{center}
+\end{figure}
+
+In order to apply rigid rotations, we label the axes as shown in Figure 1. Then, we can rotate about the $z$-axis by applying the $z$-Rotation matrix:
+\begin{gather*}
+    R_{z}(\theta) = \begin{bmatrix}
+        \cos \theta & \sin \theta & 0\\
+        -\sin \theta & \cos \theta & 0\\
+        0 & 0 &1
+        \end{bmatrix}
+\end{gather*}
+We can also apply the in-page, $y$-axis rotation with the matrix
+\begin{gather*}
+    R_{y}(\theta) = \begin{bmatrix}
+    \cos \theta & 0 & \sin \theta \\
+    0 & 1 & 0\\
+    -\sin \theta & 0 & \cos \theta
+    \end{bmatrix}
+\end{gather*}
+However, as the molecules rotate and are perturbed, we need to change basis in order to apply these rotations. For each molecule, denote the vector from the center atom to the bottom left atom as $v_{1}$ and the vector from the the center atom to the bottom right atom as $v_{2}$. Then, the change of basis matrix is
+\begin{gather*}
+    S = \begin{bmatrix} \frac{v_{2} - v_{1}}{||v_{2} - v_{1}||}\\
+        \frac{v_{1} + v_{2}}{||v_{1} + v_{2}||}\\
+        \frac{v_{2} \times v_{1}}{||v_{2} \times v_{1}||}
+    \end{bmatrix}
+\end{gather*}
+where $\times$ denotes the cross product. Thus, the full rotation operation is achieved by the matrix $SR_{i}(\theta)S^{-1}$.
+
+\section{Initialization and Equilibration}
+\subsection{Initialization}
+We initialized the system by choosing a perfect cube number $n$ of particles that provided a density greater than or equal to the target density. We then filled the box with $n^{3}$ water molecules. We  replaced two adjacent water molecules with the ion pair, so that the ions began at a distance of 3.0 \AA.
+\subsection{Equilibration}
+We equlibrated the system based on a simple Monte Carlo procedure. For each of $S$ iterations, we first selected the ions. Each ion was rotated by a randomly chosen angle around its y-axis and by an independently randomly chosen angle around its z-axis. The range of the angles were bounded to ensure ideal acceptance probabilities. The molecule was then randomly translated by a randomly chosen vector within a given range. The new energy of the system was calculated, and the new configuration was accepted or rejected based on the Metropolis criterion. Then, in each of the $S$ steps, $N$ molecules were randomly chosen to propose a move, where $N$ is the number of particles in the system. Again, each move included rotation about each axis as well as translation. Thus, in each iteration, the ions always propose moves but the water molecules are chosen randomly.
+
+\section{Results}
+
+\begin{figure}[h]
+    \begin{center}
+    \includegraphics*[width = \textwidth]{mainOutput.png}
+    \caption{Monte Carlo Simulations}
+    \end{center}
+\end{figure}
+
+Figure 2 shows the results from the Monte Carlo simulations. While computational power limited the length of equilibration iteration, we see that all simulations seem to reach a relatively stable energy as compared with initial energy. Simulation lengths were chosen based on the system's convergence to stable energy values. 340 K presented certain problems; it is unclear why. Acceptance ratios were kept at around 35\% as desired. Ionic distances seemed to fluctuate less in colder systems. This makes sense as lesser energy limits movement from equilibrium. All ionic distances showed overall upward trends, although all distances were initally set for larger than Jorgenson et al's energy minimum of 2.9 \AA. This indicates the affinity of ions for the solvent, and thus the importance of solvent in determining equilibrium.
+
+
+\begin{figure}[h]
+    \begin{center}
+    \includegraphics*[width = 0.5\textwidth]{dist.png}
+    \caption{Equilibrium distance between Cl$^{-}$ and \tbutyl ions for each temperature.}
+    \end{center}
+\end{figure}
+
+
+Figure 3 shows the average ionic distances for each temperature. In order to look at systems post equilibration, only the last 20 simulation points were included in averaging. If we dismiss 340 K due to its difficulty in energy equilibration, it is possible to discern a slight upward trend in equilibrium ionic distance as temperature increases. However, the small sample size should be taken into account. 
+
+Figure 4 displays energy as a function of ionic distance. What is clear from the graph is that this is not in fact a function: For all temperatures, various energies were recorded at the same ionic distance. This emphasizes the role played by the solvent in determining energy and thus its role on the kinetics of the reaction.
+
+\begin{figure}[h]
+    \begin{center}
+    \includegraphics*[width = 0.5\textwidth]{energydist.png}
+    \caption{Energy as a function of ionic distance.}
+    \end{center}
+\end{figure}
+
+\section{Conclusion}
+This study used Monte Carlo simulation to study the ions in the \sn reaction of t-butyl chloride in different temperatures. It demonstrates implmentation of rotating procedurs in simulations. The study showed the importance of solvent in determining the energy of the system. It also suggested a slight preference for longer ionic separations in hotter systems. In order to validate results, future studies should repeat simulations for longer iterations as well as more temperatures. Future studies could also examine solutions with multiple anions and cations to compare their interactions with each other as compared to with the solvent.
+
+\section*{References}
+\begin{enumerate}
+    \item Jorgensen, W. L., Buckner, J. K., Huston, S. E., \& Rossky, P. J. (1987). Hydration and energetics for tert-butyl chloride ion pairs in aqueous solution. Journal of the American Chemical Society, 109(7), 1891-1899.
+    \item Peters, K. S. (2007). Nature of Dynamic Processes Associated with the SN1 Reaction Mechanism. In Chemical Reviews (Vol. 107, Issue 3, pp. 859–873). American Chemical Society (ACS). https://doi.org/10.1021/cr068021k
+    \item Heath Turner, C., Brennan, J. K., Lísal, M., Smith, W. R., Karl Johnson, J., \& Gubbins, K. E. (2008). Simulation of chemical reaction equilibria by the reaction ensemble Monte Carlo method: a review†. Molecular Simulation, 34(2), 119–146. https://doi.org/10.1080\\
+    /08927020801986564
+\end{enumerate}
+
+
+
+
+
+\end{document}
